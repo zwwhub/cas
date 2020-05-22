@@ -1,0 +1,82 @@
+package com.yq.business.client.jvm;
+
+import com.yq.business.client.FlushMode;
+import com.yq.business.client.web.SessionRepository;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Created by alexqdjay on 2018/2/23.
+ */
+public class MapSessionRepository implements SessionRepository {
+
+    private final Map<String, Map<String, Object>> sessionValuesMap = new ConcurrentHashMap<>();
+
+    private FlushMode flushMode;
+
+    public MapSessionRepository(FlushMode flushMode) {
+        this.flushMode = flushMode;
+    }
+
+    public MapSessionRepository() {
+        this(FlushMode.IMMEDIATE);
+    }
+
+    @Override
+    public Map<String, Object> getSessionAttributesById(String sessionId) {
+        Map<String, Object> stringObjectMap = sessionValuesMap.get(sessionId);
+
+        if (stringObjectMap !=null){
+            long now = System.currentTimeMillis();
+            if ((now - (Long)stringObjectMap.get("lastAccessTime"))/1000 > (Integer)stringObjectMap.get("maxInactiveInterval")){
+                return null;
+            }
+        }
+        return stringObjectMap;
+    }
+
+    @Override
+    public void saveAttributes(String sessionId, Map<String, Object> attributes) {
+        if (attributes == null) {
+            return;
+        }
+        Map<String, Object> values = getSessionValues(sessionId);
+        attributes.entrySet().stream().forEach(entry -> {
+            if (entry.getValue() == null) {
+                values.remove(entry.getKey());
+            } else {
+                values.put(entry.getKey(), entry.getValue());
+            }
+        });
+    }
+
+    @Override
+    public FlushMode getFlushMode() {
+        return flushMode;
+    }
+
+    @Override
+    public void removeSession(String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return;
+        }
+        sessionValuesMap.remove(sessionId);
+    }
+
+    private Map<String, Object> getSessionValues(String sid) {
+        Map<String, Object> sessionValues = sessionValuesMap.get(sid);
+        if (sessionValues == null) {
+            sessionValues = new ConcurrentHashMap<>();
+            Map<String, Object> preMap = sessionValuesMap.putIfAbsent(sid, sessionValues);
+            if (preMap != null) {
+                sessionValues = preMap;
+            }
+        }
+        return sessionValues;
+    }
+
+    public void setFlushMode(FlushMode flushMode) {
+        this.flushMode = flushMode;
+    }
+}
